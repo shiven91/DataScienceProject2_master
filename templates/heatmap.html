@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Heatmap</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.0.1/dist/leaflet.js"></script>
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script type="text/javascript" src="../js/leaflet-heatmap.js"></script>
+  <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.46.0/mapbox-gl.js'></script>
+  <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.46.0/mapbox-gl.css' rel='stylesheet' />
+</head>
+
+<body>
+
+  <div id="map"></div>
+
+  <style>
+    body {
+      padding: 0px;
+      margin: 0px;
+    }
+
+    #map,
+    body,
+    html {
+      height: 100%;
+    }
+  </style>
+
+  <script type="text/javascript">
+
+    var mapbox = 'https://api.mapbox.com/styles/v1/mapbox/light-v9/tiles/256/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWRpYXoiLCJhIjoiY2poeGlkY3ppMGMycTN3bzY1dXE5NHhqeiJ9.jPWKIXqv8gJMG1bJM-Y0NA'
+
+
+
+    var url = "https://data.sfgov.org/resource/gxxq-x39z.json?$limit=10000"
+
+    // Store our API endpoint inside queryUrl
+    // var queryUrl = "http://127.0.0.1:5000/earthquakedata";
+    // Perform a GET request to the query URL
+
+    mapboxgl.accessToken = "pk.eyJ1IjoibWRpYXoiLCJhIjoiY2poeGlkY3ppMGMycTN3bzY1dXE5NHhqeiJ9.jPWKIXqv8gJMG1bJM-Y0NA"
+    var map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/dark-v9',
+      center: [-120, 50],
+      zoom: 2
+    });
+
+    map.on('load', function () {
+      // Add a geojson point source.
+      // Heatmap layers also work with a vector tile source.
+      map.addSource('earthquakes', {
+        "type": "geojson",
+        "data": "/earthquakedata",
+      });
+
+      map.addLayer({
+        "id": "earthquakes-heat",
+        "type": "heatmap",
+        "source": "earthquakes",
+        "paint": {
+          // Increase the heatmap weight based on frequency and property magnitude
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            0, 0,
+            6, 1
+          ],
+          // Increase the heatmap color weight weight by zoom level
+          // heatmap-intensity is a multiplier on top of heatmap-weight
+          "heatmap-intensity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0, 1,
+            9, 3
+          ],
+          // Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
+          // Begin color ramp at 0-stop with a 0-transparancy color
+          // to create a blur-like effect.
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0, "rgba(33,102,172,0)",
+            0.2, "rgb(103,169,207)",
+            0.4, "rgb(209,229,240)",
+            0.6, "rgb(253,219,199)",
+            0.8, "rgb(239,138,98)",
+            1, "rgb(178,24,43)"
+          ],
+          // Adjust the heatmap radius by zoom level
+          "heatmap-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0, 2,
+            9, 20
+          ],
+          // Transition from heatmap to circle layer by zoom level
+          "heatmap-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7, 1,
+            9, 0
+          ],
+        }
+      }, 'waterway-label');
+
+      map.addLayer({
+        "id": "earthquakes-point",
+        "type": "circle",
+        "source": "earthquakes",
+        "paint": {
+          // Size circle radius by earthquake magnitude and zoom level
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7, [
+              "interpolate",
+              ["linear"],
+              ["get", "mag"],
+              1, 1,
+              6, 4
+            ],
+            16, [
+              "interpolate",
+              ["linear"],
+              ["get", "mag"],
+              1, 5,
+              6, 50
+            ]
+          ],
+          // Color circle by earthquake magnitude
+          "circle-color": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            1, "rgba(33,102,172,0)",
+            2, "rgb(103,169,207)",
+            3, "rgb(209,229,240)",
+            4, "rgb(253,219,199)",
+            5, "rgb(239,138,98)",
+            6, "rgb(178,24,43)"
+          ],
+          "circle-stroke-color": "white",
+          "circle-stroke-width": 1,
+          // Transition from heatmap to circle layer by zoom level
+          "circle-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7, 0,
+            8, 1
+          ]
+        }
+      }, 'waterway-label');
+    });
+    
+    d3.json("/earthquakedata", function (data) {
+      // Once we get a response, send the data.features object to the createFeatures function
+      createFeatures(data.features);
+      console.log(data.features)
+    });
+    
+
+    function createFeatures(earthquakeData) {
+
+      // Define a function we want to run once for each feature in the features array
+      // Give each feature a popup describing the place and time of the earthquake
+      function onEachFeature(feature, layer) {
+        layer.bindPopup("<h3>" + feature.properties.place +
+          "</h3><hr><p>" + new Date(feature.properties.time) + "</p>");
+      }
+
+      // Create a GeoJSON layer containing the features array on the earthquakeData object
+      // Run the onEachFeature function once for each piece of data in the array
+      var earthquakes = L.geoJSON(earthquakeData, {
+        onEachFeature: onEachFeature
+      });
+
+      // Sending our earthquakes layer to the createMap function
+      createMap(earthquakes);
+    }
+
+    function createMap(earthquakes) {
+
+      // Define streetmap and darkmap layers
+      var streetmap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/outdoors-v10/tiles/256/{z}/{x}/{y}?" +
+        "access_token=pk.eyJ1IjoibWRpYXoiLCJhIjoiY2podjQ5MXFwMDFoOTN2bWRoaXc3MTAybCJ9.vJyWJ8UQhjYGgnWf0BBjMQ");
+
+      var darkmap = L.tileLayer("https://api.mapbox.com/styles/v1/mapbox/dark-v9/tiles/256/{z}/{x}/{y}?" +
+        "access_token=pk.eyJ1IjoibWRpYXoiLCJhIjoiY2podjQ5MXFwMDFoOTN2bWRoaXc3MTAybCJ9.vJyWJ8UQhjYGgnWf0BBjMQ");
+      var heat = L.heatLayer(earthquakes, {
+        radius: 20,
+        blur: 35
+      });
+      // Define a baseMaps object to hold our base layers
+      var baseMaps = {
+        "Street Map": streetmap,
+        "Dark Map": darkmap,
+        "Heat Map": map
+      };
+
+      // Create overlay object to hold our overlay layer
+      var overlayMaps = {
+        Earthquakes: earthquakes
+      };
+
+      // Create our map, giving it the streetmap and earthquakes layers to display on load
+      var myMap = L.map('map', {
+        center: [37.7749, -122.4194],
+        zoom: 5,
+        layers: [streetmap, earthquakes]
+      });
+
+      L.tileLayer(mapbox).addTo(myMap);
+
+      // Create a layer control
+      // Pass in our baseMaps and overlayMaps
+      // Add the layer control to the map
+      L.control.layers(baseMaps, overlayMaps, {
+        collapsed: false
+      }).addTo(myMap);
+    }
+
+
+  </script>
+
+</body>
+
+</html>
